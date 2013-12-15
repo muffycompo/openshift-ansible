@@ -1,0 +1,39 @@
+---
+# Global Vars for OpenShift
+
+iface: '{{ ansible_default_ipv4.interface }}'
+
+domain_name: cloud.example.net
+dns_port: 53
+rndc_port: 953
+dns_key: "+GPQn8ufEpRLk5xgUU+W3CXdD5CKLO5hP4kCy1PRngV26V0eHnBrJF55IWw0HZme6mXJAgn7gkFMQbuQGq7tLQ=="
+
+mongodb_datadir_prefix: /data
+mongod_port:  2700
+mongo_admin_pass: skldflk
+
+mcollective_pass: asdasd
+admin_pass: asdasd
+amquser_pass: asdasd
+
+vip: 10.0.0.4
+vip_netmask: 255.255.255.0
+
+# Kerberos Configuration
+kerb_ipa_server: ipa01.oo.example.net
+kerb_domain: oo.example.net
+kerb_realm: EXAMPLE.NET
+
+# Node Public Configuration - create the following A records on your DNS server {{ ansible_hostname }}-{{ public_domain_suffix }}.{{ public_domain }}
+# eg. oo-broker01-melb.example.net
+public_domain: example.net
+public_domain_suffix: melb
+
+# FreeIPA DNS Configuration (dirty method)
+ipa_bind_ip: 10.0.1.10
+ipa_server: ipa01.oo.example.net
+kinit_user: admin
+kinit_password: adminpassword
+
+# Broker Hostname
+broker_hostname: oo-broker.example.net

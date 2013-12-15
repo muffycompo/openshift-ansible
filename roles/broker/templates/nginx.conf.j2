@@ -1,0 +1,20 @@
+ server {
+   listen 80 default;
+   server_name  _;
+   rewrite   ^  http://www.$host$request_uri?;
+ }
+ 
+ server {
+   listen 80;
+   server_name {{ broker_hostname }};
+   rewrite        ^ https://$server_name$request_uri? permanent;
+ }
+ 
+  server {
+   listen 80;
+   server_name  {{ ansible_default_ipv4.address }};
+   root /var/www/html;
+   index index.html;
+ }
+ 
+

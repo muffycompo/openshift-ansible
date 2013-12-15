@@ -1,0 +1,171 @@
+---
+# Tasks for the Openshift broker installation
+
+- name: install mcollective common
+  yum: name=mcollective-common state=installed disablerepo=puppetlabs-*
+  
+- name: install  rubygem-passenger
+  yum: name=rubygem-passenger state=installed disablerepo=puppetlabs-*
+  
+- name: Install the broker components
+  yum: name="{{ item }}" state=installed disablerepo=puppetlabs-*
+  with_items: "{{ broker_packages }}"
+
+- name: Install mcollective
+  yum: name=mcollective-client disablerepo=puppetlabs-*
+
+- name: Copy the mcollective configuration file (old not used)
+  template: src=client.cfg.j2 dest=/etc/mcollective/client.cfg
+
+- name: Copy the mcollective configuration file (the correct directory)
+  template: src=client.cfg.j2 dest=/opt/rh/ruby193/root/etc/mcollective/client.cfg 
+
+- name: Copy the rhc client configuration file
+  template: src=express.conf.j2 dest=/etc/openshift/express.conf
+  register: last_run
+
+- name: Install the gems for rhc
+  script: gem.sh 
+  when: last_run.changed
+
+- name: create the file for mcollective logging
+  copy: content="" dest=/var/log/mcollective-client.log owner=apache group=root
+
+- name: SELinux - configure sebooleans
+  seboolean:  name="{{ item }}" state=true persistent=yes
+  with_items:
+      - httpd_unified
+      - httpd_execmem
+      - httpd_can_network_connect
+      - httpd_can_network_relay 
+      - httpd_run_stickshift
+      - named_write_master_zones 
+      - httpd_verify_dns
+      - allow_ypbind
+
+- name: copy the auth keyfiles
+  copy: src="{{ item }}" dest="/etc/openshift/{{ item }}"
+  with_items:
+      - server_priv.pem
+      - server_pub.pem
+      - htpasswd
+
+- name: create ~/.ssh/ directory 
+  action: file path=~/.ssh/ state=directory
+  
+- name: Fix the selinux contexts on ssh keys
+  shell: restorecon -R -v ~/.ssh/
+  
+- name: copy the local ssh keys
+  copy: src="~/.ssh/{{ item }}" dest="~/.ssh/{{ item }}"
+  with_items:
+      - id_rsa.pub
+      - id_rsa
+
+- name: copy the local ssh keys to openshift dir
+  copy: src="~/.ssh/{{ item }}" dest="/etc/openshift/rsync_{{ item }}"
+  with_items:
+      - id_rsa.pub
+      - id_rsa
+
+- name: Copy the broker configuration file
+  template: src=broker.conf.j2 dest=/etc/openshift/broker.conf
+  notify: restart broker
+
+- name: Copy the console configuration file
+  template: src=console.conf.j2 dest=/etc/openshift/console.conf
+  notify: restart console
+
+- name: create the file for ssl.conf
+  copy: src=ssl.conf dest=/etc/httpd/conf.d/ssl.conf owner=apache group=root
+
+- name: copy the configuration file for openshift plugins
+  template: src="{{ item }}" dest="/etc/openshift/plugins.d/{{ item }}"
+  with_items:
+      - openshift-origin-auth-remote-user.conf
+      - openshift-origin-dns-nsupdate.conf
+      - openshift-origin-msg-broker-mcollective.conf
+      
+- name: Bundle the ruby gems
+  shell: chdir=/var/www/openshift/broker/ /usr/bin/scl enable ruby193 "bundle show"; touch bundle.init
+         creates=//var/www/openshift/broker/bundle.init
+
+- name: install mod_auth_kerb
+  yum: name=mod_auth_kerb state=installed
+
+- name: install ipa-admintools
+  yum: name=ipa-admintools state=installed
+
+- name: Configure Kerberos Keytab
+  shell: echo {{ kinit_password }} | kinit {{ kinit_user }}; ipa service-add HTTP/`hostname`; ipa-getkeytab -s {{ kerb_ipa_server }} -k /etc/httpd/conf/krb5.keytab -p HTTP/`hostname`; chown apache /etc/httpd/conf/krb5.keytab
+
+- name: configure nsupdate
+  shell: ipa service-add DNS/`hostname`; ipa-getkeytab -s {{ ipa_server }} -p DNS/`hostname` -k /etc/dns.keytab; kinit -kt /etc/dns.keytab -p DNS/`hostname`; chown apache:apache /etc/dns.keytab;
+
+- name: Copy the httpd configuration file for broker
+  template: src=openshift-origin-auth-remote-user-kerberos.conf.j2 dest=/var/www/openshift/broker/httpd/conf.d/openshift-origin-auth-remote-user-kerberos.conf
+  notify: restart broker
+
+- name: Copy the httpd configuration file  for console
+  template: src=openshift-origin-auth-remote-user-kerberos-console.conf.j2 dest=/var/www/openshift/console/httpd/conf.d/openshift-origin-auth-remote-user-kerberos.conf
+  notify: restart console
+
+- name: Fix the selinux contexts on several files
+  shell: fixfiles -R rubygem-passenger restore; fixfiles -R mod_passenger restore; restorecon -rv /var/run; restorecon -rv /usr/share/rubygems/gems/passenger-*; touch /opt/context.fixed  creates=/opt/context.fixed
+  
+- name: SELinux - configure sebooleans
+  seboolean:  name="{{ item }}" state=true persistent=yes
+  with_items:
+      - httpd_unified
+      - httpd_can_network_connect
+      - httpd_can_network_relay
+      - httpd_run_stickshift
+      - named_write_master_zones
+      - allow_ypbind
+      - httpd_verify_dns
+      - httpd_enable_homedirs
+      - httpd_execmem
+      
+      
+- name: start the http and broker service
+  service: name="{{ item }}" state=started enabled=yes
+  with_items:
+      - httpd
+      - openshift-broker
+      - openshift-console
+
+- name: Install the rhc client
+  gem: name={{ item }} state=latest
+  with_items:
+   - rdoc
+   - rhc
+  ignore_errors: yes 
+  
+- name: copy server keys
+  shell: cp /etc/openshift/server_p* /var/www/openshift/broker/config/
+
+- name: remove httpd from port 80
+  shell: sed -i '/Listen 80/s/^/#/g' /etc/httpd/conf/httpd.conf; service httpd restart
+
+- name: install nginx forwarding service
+  yum: name=nginx state=installed
+  
+- name: Copy nginx configuration
+  template: src=nginx.conf.j2 dest=/etc/nginx/conf.d/default.conf
+  notify: restart nginx enabled=yes
+
+- name: create the http OK file
+  shell: echo "OK" > /var/www/html/index.html
+  
+- name: install arptables_jf
+  yum: name=arptables_jf state=installed
+
+- name: configure direct routing
+  shell: arptables -A IN -d {{ vip }} -j DROP; arptables -A OUT -d {{ vip }} -j mangle --mangle-ip-s {{ ansible_default_ipv4.address }}; service arptables_jf save; chkconfig arptables_jf on
+
+- name: dirty configure rc.local
+  template: src=rc.local.j2 dest=/etc/rc.local mode=0777
+  
+- name: run it
+  shell: /etc/rc.local
+  ignore_errors: yes

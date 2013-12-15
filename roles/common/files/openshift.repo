@@ -1,0 +1,11 @@
+[openshift-origin-deps]
+name=openshift-origin-deps
+baseurl=https://mirror.openshift.com/pub/openshift-origin/nightly/rhel-6/dependencies/x86_64/
+gpgcheck=0
+enabled=1
+
+[openshift-origin]
+name=openshift-origin
+baseurl=https://mirror.openshift.com/pub/openshift-origin/nightly/rhel-6/packages/latest/x86_64/
+gpgcheck=0
+enabled=1
