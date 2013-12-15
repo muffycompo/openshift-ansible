@@ -1,9 +1,14 @@
 openshift-ansible
 =================
 
-Ansible script to deploy OpenShift Origin w/ FreeIPA Integration (DNS and Kerberos). Forked from https://github.com/ansible/ansible-examples/tree/master/openshift
+Ansible script to deploy a highly available OpenShift Origin w/ FreeIPA Integration (DNS and Kerberos). Forked from https://github.com/ansible/ansible-examples/tree/master/openshift
 
-Please see above for the layout diagram, I have merely modified to work with the latest nightly builds and to integrate with FreeIPA.
+Please see above for the layout diagram, I have merely modified to work with the latest nightly builds and to integrate with FreeIPA. 
+
+You can run this with just one node, but you need 3 seperate activemq/mongodb servers to do the replication.
+
+Extra:
+- Nginx is installed on the brokers behind the LVS (Direct Routing) to do any redirects from non www to www, simply point the @A record to the LVS dedicated IP.
 
 Tested on CentOS 6.5 
 
